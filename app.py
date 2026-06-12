@@ -1,6 +1,5 @@
 import os
 from datetime import datetime
-import zoneinfo
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, Usuario, Jogo, Palpite
@@ -9,9 +8,8 @@ from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
 
-# CONFIGURAÇÃO DE SEGURANÇA PARA AMBIENTES EFÊMEROS (RENDER)
-# Roda em memória para garantir estabilidade absoluta de leitura/escrita e eliminar o erro de tela branca
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+# ARQUIVO DE BANCO LOCAL TRADICIONAL
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bolao.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 app.secret_key = os.getenv(
@@ -33,12 +31,6 @@ with app.app_context():
 COPA_ENCERRADA = False 
 CAMPEAO_REAL = "Brasil"
 
-def obter_hora_brasilia():
-    try:
-        tz = zoneinfo.ZoneInfo("America/Sao_Paulo")
-        return datetime.now(tz).replace(tzinfo=None)
-    except Exception:
-        return datetime.now()
 
 @app.after_request
 def adicionar_cabecalhos_seguranca(response):
@@ -111,7 +103,6 @@ def cadastro():
             flash("Este nome de usuário já está em uso.", "danger")
             return render_template("cadastro.html")
 
-        # Se for o primeiro usuário do banco em memória, garante privilégio admin se for seu nome
         novo_usuario = Usuario(nome=nome_lower, senha_hash=generate_password_hash(senha))
         db.session.add(novo_usuario)
         db.session.commit()
@@ -129,7 +120,7 @@ def logout():
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES COM TRATAMENTO DE ERRO CRÍTICO
+# 2. GESTÃO DE PALPITES (CÓDIGO LIMPO E CORRIGIDO)
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -138,20 +129,6 @@ def dashboard():
         return redirect(url_for("login"))
 
     uid = session["usuario_id"]
-    agora = obter_hora_brasilia()
-
-    # Proteção caso as tabelas estejam vazias após o reset da Render
-    proximo_jogo = None
-    ja_palpitou_proximo = False
-    
-    try:
-        proximo_jogo = Jogo.query.filter(Jogo.data_jogo > agora, Jogo.encerrado == False).order_by(Jogo.data_jogo.asc()).first()
-        if proximo_jogo:
-            palpite_check = Palpite.query.filter_by(usuario_id=uid, jogo_id=proximo_jogo.id).first()
-            if palpite_check:
-                ja_palpitou_proximo = True
-    except Exception:
-        proximo_jogo = None
 
     total_jogos = Jogo.query.count()
     total_palpites = Palpite.query.filter_by(usuario_id=uid).count()
@@ -177,8 +154,8 @@ def dashboard():
         pontos_acumulados=pontos_acumulados,
         acertos_exatos=acertos_exatos,
         aproveitamento=aproveitamento,
-        proximo_jogo=proximo_jogo,
-        ja_palpitou_proximo=ja_palpitou_proximo
+        proximo_jogo=None,
+        ja_palpitou_proximo=False
     )
 
 
@@ -233,7 +210,7 @@ def salvar_palpite(jogo_id):
     if not jogo:
         return jsonify({"success": False, "message": "Jogo não localizado."}), 404
 
-    if obter_hora_brasilia() >= jogo.data_jogo or jogo.encerrado:
+    if datetime.now() >= jogo.data_jogo or jogo.encerrado:
         return jsonify({"success": False, "message": "Bloqueio: Confronto já iniciado ou encerrado!"}), 400
 
     palpite_existente = Palpite.query.filter_by(usuario_id=session["usuario_id"], jogo_id=jogo_id).first()
@@ -284,7 +261,7 @@ def salvar_campeao():
 
 
 # ==========================================================================
-# 3. RANKING E AUDITORIA
+# 3. RANKING E AUDITORIA (CORRIGIDO)
 # ==========================================================================
 
 @app.route("/ranking")
