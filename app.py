@@ -8,8 +8,15 @@ from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
 
-# ARQUIVO DE BANCO LOCAL TRADICIONAL
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bolao.db"
+# CONFIGURAÇÃO INTELIGENTE: POSTGRES NA RENDER / SQLITE LOCAL NO VS CODE
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bolao.db"
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 app.secret_key = os.getenv(
@@ -120,7 +127,7 @@ def logout():
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES (CÓDIGO LIMPO E CORRIGIDO)
+# 2. GESTÃO DE PALPITES
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -138,9 +145,9 @@ def dashboard():
     acertos_exatos = 0
     
     for p in palpites_usuario:
-        j = Jogo.query.get(p.jogo_id)
-        if j and j.gols_a is not None and j.gols_b is not None:
-            pts = calcular_pontos(p.gols_a, p.gols_b, j.gols_a, j.gols_b)
+        jogo = Jogo.query.get(p.jogo_id)
+        if jogo and jogo.gols_a is not None and jogo.gols_b is not None:
+            pts = calcular_pontos(p.gols_a, p.gols_b, jogo.gols_a, jogo.gols_b)
             pontos_acumulados += pts
             if pts == 3:
                 acertos_exatos += 1
@@ -215,7 +222,7 @@ def salvar_palpite(jogo_id):
 
     palpite_existente = Palpite.query.filter_by(usuario_id=session["usuario_id"], jogo_id=jogo_id).first()
     if palpite_existente:
-        return jsonify({"success": False, "message": "Você já possui um palpite salvo para esta partida."}), 400
+        return jsonify({"success": False, "message": "Você já possui um palpite保存 para esta partida."}), 400
 
     try:
         novo_palpite = Palpite(
@@ -261,7 +268,7 @@ def salvar_campeao():
 
 
 # ==========================================================================
-# 3. RANKING E AUDITORIA (CORRIGIDO)
+# 3. RANKING E AUDITORIA
 # ==========================================================================
 
 @app.route("/ranking")
