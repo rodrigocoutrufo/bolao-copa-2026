@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+import zoneinfo
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, Usuario, Jogo, Palpite
@@ -8,15 +9,12 @@ from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
 
-# ESTRATÉGIA DE FIXAÇÃO DE BANCO LOCAL:
-# Força a criação do banco em um caminho absoluto na raiz do projeto
+# CONFIGURAÇÃO ABSOLUTA DO BANCO DE DADOS NA RAIZ DO PROJETO
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'bolao_producao.db')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# --------------------------------------------------------------------------
-# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO (Cookies Rígidos)
-# --------------------------------------------------------------------------
+# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO
 app.secret_key = os.getenv(
     "FLASK_SECRET_KEY", 
     "4f7b2c9e8a1d3f5b6c7e8d9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c"
@@ -30,17 +28,17 @@ app.config.update(
 
 db.init_app(app)
 
-# Inicializa o banco garantindo que ele não vai resetar o que já existe
 with app.app_context():
     db.create_all()
 
 COPA_ENCERRADA = False 
 CAMPEAO_REAL = "Brasil"
 
+# FUNÇÃO PARA PEGAR O HORÁRIO CORRETO DE SÃO PAULO/BRASÍLIA
+def obter_hora_brasilia():
+    tz = zoneinfo.ZoneInfo("America/Sao_Paulo")
+    return datetime.now(tz).replace(tzinfo=None)
 
-# --------------------------------------------------------------------------
-# CABEÇALHOS DE PROTEÇÃO COMPLEMENTARES (Anti-Injection & CSP)
-# --------------------------------------------------------------------------
 @app.after_request
 def adicionar_cabecalhos_seguranca(response):
     response.headers['Content-Security-Policy'] = (
@@ -129,7 +127,7 @@ def logout():
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES COM VALIDAÇÃO TEMPORAL RÍGIDA E CONTAGEM
+# 2. GESTÃO DE PALPITES COM CRONÔMETRO ATUALIZADO
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -138,8 +136,9 @@ def dashboard():
         return redirect(url_for("login"))
 
     uid = session["usuario_id"]
-    agora = datetime.now()
+    agora = obter_hora_brasilia()
 
+    # BUSCA O PRÓXIMO JOGO AJUSTADO AO TIMEZONE DO BRASIL
     proximo_jogo = Jogo.query.filter(Jogo.data_jogo > agora, Jogo.encerrado == False).order_by(Jogo.data_jogo.asc()).first()
     
     ja_palpitou_proximo = False
@@ -215,7 +214,7 @@ def palpites():
 @app.route("/salvar_palpite/<int:jogo_id>", methods=["POST"])
 def salvar_palpite(jogo_id):
     if "usuario_id" not in session:
-        return jsonify({"success": False, "message": "Sessão inválida ou expirada."}), 401
+        return jsonify({"success": False, "message": "Sessão inválida."}), 401
 
     data = request.get_json() if request.is_json else request.form
     gols_a = data.get("gols_a")
@@ -228,8 +227,9 @@ def salvar_palpite(jogo_id):
     if not jogo:
         return jsonify({"success": False, "message": "Jogo não localizado."}), 404
 
-    if datetime.now() >= jogo.data_jogo or jogo.encerrado:
-        return jsonify({"success": False, "message": "Bloqueio de segurança: Este confronto já se iniciou ou foi encerrado!"}), 400
+    # TRAVA DE SEGURANÇA BASEADA NO HORÁRIO DE BRASÍLIA
+    if obter_hora_brasilia() >= jogo.data_jogo or jogo.encerrado:
+        return jsonify({"success": False, "message": "Bloqueio: Confronto já iniciado ou encerrado!"}), 400
 
     palpite_existente = Palpite.query.filter_by(usuario_id=session["usuario_id"], jogo_id=jogo_id).first()
     if palpite_existente:
@@ -279,7 +279,7 @@ def salvar_campeao():
 
 
 # ==========================================================================
-# 3. RANKING E AUDITORIA SECURE QUERIES
+# 3. RANKING E AUDITORIA
 # ==========================================================================
 
 @app.route("/ranking")
@@ -321,7 +321,7 @@ def api_palpites_usuario(user_id):
     palpites_user = Palpite.query.filter_by(usuario_id=user_id).all()
     resultado = []
     
-    for p in palpites_user:  # CORRIGIDO DE FORM DEFINTIVA
+    for p in palpites_user:  # TOTALMENTE CORRIGIDO
         jogo = Jogo.query.get(p.jogo_id)
         if jogo and (jogo.encerrado or jogo.status == "FINISHED"):
             pts_obtidos = calcular_pontos(p.gols_a, p.gols_b, jogo.gols_a, jogo.gols_b)
@@ -346,7 +346,7 @@ def api_palpites_usuario(user_id):
 @app.route("/admin")
 def admin_panel():
     if "usuario_id" not in session or not session.get("is_admin"):
-        return "Acesso Negado: Privilégios insuficientes.", 403
+        return "Acesso Negado.", 403
     
     total_jogos = Jogo.query.count()
     return render_template("admin.html", total_jogos=total_jogos)
