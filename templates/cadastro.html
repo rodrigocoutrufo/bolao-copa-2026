@@ -1,43 +1,65 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block content %}
-<div style="display: flex; justify-content: center; align-items: center; min-height: 70vh; padding: 20px;">
-    <div class="card" style="width: 100%; max-width: 450px; background: radial-gradient(circle at top right, #111d30, var(--bg-surface)); border: 1px solid var(--border-soft); box-shadow: 0 15px 35px rgba(0,0,0,0.6); padding: 35px;">
-        
-        <div style="text-align: center; margin-bottom: 30px;">
-            <div style="width: 60px; height: 60px; background: rgba(255, 215, 0, 0.1); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 15px;">
-                <i class="fa-solid fa-user-plus" style="color: var(--gold); font-size: 24px;"></i>
-            </div>
-            <h2 style="font-size: 24px; font-weight: 900; letter-spacing: -0.5px;">Criar Conta</h2>
-            <p style="color: var(--text-muted); font-size: 14px; margin-top: 5px;">Cadastre-se para começar a enviar seus palpites.</p>
-        </div>
-
-        <form action="{{ url_for('cadastro') }}" method="POST" style="display: flex; flex-direction: column; gap: 20px;">
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Nome de Usuário</label>
-                <div style="position: relative;">
-                    <i class="fa-solid fa-user" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="text" name="nome" placeholder="Escolha seu nome de usuário..." style="width: 100%; height: 48px; background: var(--bg-input); border: 1px solid var(--border-soft); border-radius: 10px; color: white; padding-left: 45px; padding-right: 15px; font-size: 14px; outline: none; transition: 0.2s;" onfocus="this.style.borderColor='var(--accent-emerald)'" onblur="this.style.borderColor='var(--border-soft)'" required>
-                </div>
-            </div>
-
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Senha de Acesso</label>
-                <div style="position: relative;">
-                    <i class="fa-solid fa-lock" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="password" name="senha" placeholder="Crie uma senha segura..." style="width: 100%; height: 48px; background: var(--bg-input); border: 1px solid var(--border-soft); border-radius: 10px; color: white; padding-left: 45px; padding-right: 15px; font-size: 14px; outline: none; transition: 0.2s;" onfocus="this.style.borderColor='var(--accent-emerald)'" onblur="this.style.borderColor='var(--border-soft)'" required>
-                </div>
-            </div>
-
-            <button type="submit" class="btn-primary" style="height: 48px; font-size: 15px; margin-top: 10px; background: linear-gradient(135deg, #00e676, #00b359);">
-                Finalizar Cadastro <i class="fa-solid fa-check"></i>
-            </button>
-        </form>
-
-        <div style="text-align: center; margin-top: 25px; font-size: 14px; color: var(--text-muted);">
-            Já possui uma conta? <a href="{{ url_for('login') }}" style="color: var(--accent-emerald); text-decoration: none; font-weight: 700; transition: 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--accent-emerald)'">Fazer Login</a>
-        </div>
-
+<div style="max-width: 450px; margin: 60px auto; padding: 0 20px;">
+    
+    <div style="margin-bottom: 30px; text-align: center;">
+        <h2 style="font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: -1px; margin-bottom: 8px;">
+            Criar Conta
+        </h2>
+        <p style="color: var(--text-muted); font-size: 14px; font-weight: 500;">
+            Entre para o bolão oficial da Copa do Mundo 2026.
+        </p>
     </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div style="margin-bottom: 20px; padding: 14px 16px; border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.1); color: #f87171; font-size: 13px; font-weight: 700; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.3px;">
+              <i class="fa-solid fa-circle-exclamation" style="margin-right: 8px;"></i> {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('cadastro') }}" method="POST" style="background: var(--bg-surface); border: var(--border-sharp); border-radius: 4px; padding: 30px; transition: background 0.25s ease;">
+        
+        <div style="margin-bottom: 20px;">
+            <label for="nome" style="display: block; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;">
+                Nome de Usuário
+            </label>
+            <input type="text" id="nome" name="nome" required placeholder="Ex: rodrigim" autocomplete="off"
+                   style="width: 100%; height: 46px; background: var(--bg-input); border: var(--border-sharp); border-radius: 2px; color: var(--text-main); padding: 0 14px; font-size: 14px; font-weight: 600; outline: none; transition: border-color 0.15s ease;">
+        </div>
+
+        <div style="margin-bottom: 25px;">
+            <label for="senha" style="display: block; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;">
+                Senha (Mínimo 6 caracteres)
+            </label>
+            <input type="password" id="senha" name="senha" required placeholder="••••••••"
+                   style="width: 100%; height: 46px; background: var(--bg-input); border: var(--border-sharp); border-radius: 2px; color: var(--text-main); padding: 0 14px; font-size: 14px; font-weight: 600; outline: none; transition: border-color 0.15s ease;">
+        </div>
+
+        <button type="submit" class="btn-primary" style="margin-bottom: 15px;">
+            Finalizar Cadastro <i class="fa-solid fa-arrow-right"></i>
+        </button>
+
+        <div style="text-align: center; margin-top: 15px;">
+            <p style="font-size: 13px; color: var(--text-muted); font-weight: 600;">
+                Já tem uma conta? 
+                <a href="{{ url_for('login') }}" style="color: var(--accent-green); text-decoration: none; font-weight: 800; margin-left: 4px;">
+                    Faça Login
+                </a>
+            </p>
+        </div>
+    </form>
 </div>
+
+<script>
+    // Efeito sutil de foco brutalista nos inputs
+    document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('focus', () => input.style.borderColor = 'var(--accent-green)');
+        input.addEventListener('blur', () => input.style.borderColor = 'var(--border-sharp)');
+    });
+</script>
 {% endblock %}

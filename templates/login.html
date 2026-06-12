@@ -1,54 +1,65 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block content %}
-<div style="display: flex; justify-content: center; align-items: center; min-height: 70vh; padding: 20px;">
-    <div class="card" style="width: 100%; max-width: 450px; background: radial-gradient(circle at top right, #111d30, var(--bg-surface)); border: 1px solid var(--border-soft); box-shadow: 0 15px 35px rgba(0,0,0,0.6); padding: 35px;">
-        
-        <div style="text-align: center; margin-bottom: 30px;">
-            <div style="width: 60px; height: 60px; background: rgba(0, 230, 118, 0.1); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto 15px;">
-                <i class="fa-solid fa-right-to-bracket" style="color: var(--accent-emerald); font-size: 24px;"></i>
-            </div>
-            <h2 style="font-size: 24px; font-weight: 900; letter-spacing: -0.5px;">Acessar Bolão</h2>
-            <p style="color: var(--text-muted); font-size: 14px; margin-top: 5px;">Insira suas credenciais para gerenciar seus palpites.</p>
-        </div>
-
-        <form action="{{ url_for('login') }}" method="POST" style="display: flex; flex-direction: column; gap: 20px;">
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Nome de Usuário</label>
-                <div style="position: relative;">
-                    <i class="fa-solid fa-user" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="text" name="nome" placeholder="Digite seu usuário..." style="width: 100%; height: 48px; background: var(--bg-input); border: 1px solid var(--border-soft); border-radius: 10px; color: white; padding-left: 45px; padding-right: 15px; font-size: 14px; outline: none; transition: 0.2s;" onfocus="this.style.borderColor='var(--accent-emerald)'" onblur="this.style.borderColor='var(--border-soft)'" required>
-                </div>
-            </div>
-
-            <div>
-                <label style="display: block; font-size: 12px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Senha de Acesso</label>
-                <div style="position: relative;">
-                    <i class="fa-solid fa-lock" style="position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
-                    <input type="password" name="senha" placeholder="Digite sua senha..." style="width: 100%; height: 48px; background: var(--bg-input); border: 1px solid var(--border-soft); border-radius: 10px; color: white; padding-left: 45px; padding-right: 15px; font-size: 14px; outline: none; transition: 0.2s;" onfocus="this.style.borderColor='var(--accent-emerald)'" onblur="this.style.borderColor='var(--border-soft)'" required>
-                </div>
-            </div>
-
-            <button type="submit" class="btn-primary" style="height: 48px; font-size: 15px; margin-top: 10px;">
-                Entrar no Sistema <i class="fa-solid fa-chevron-right"></i>
-            </button>
-        </form>
-
-        <div style="text-align: center; margin-top: 25px; font-size: 14px; color: var(--text-muted);">
-            Não tem uma conta? <a href="{{ url_for('cadastro') }}" style="color: var(--accent-emerald); text-decoration: none; font-weight: 700; transition: 0.2s;" onmouseover="this.style.color='var(--text-main)'" onmouseout="this.style.color='var(--accent-emerald)'">Cadastre-se aqui</a>
-        </div>
-
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-soft);">
-            <div style="font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
-                <i class="fa-solid fa-circle-info text-gold"></i> Regras de Pontuação
-            </div>
-            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-muted);">
-                <div style="display: flex; justify-content: space-between;"><span style="color: white; font-weight: 600;">Placar Exato:</span> <span class="badge badge-exact">+3 PTS</span></div>
-                <div style="display: flex; justify-content: space-between;"><span style="color: white; font-weight: 600;">Acertar Vencedor/Empate:</span> <span class="badge badge-winner">+1 PT</span></div>
-                <div style="display: flex; justify-content: space-between;"><span style="color: white; font-weight: 600;">Acertar Campeão:</span> <span class="badge badge-champion" style="background: #ca8a04; color: black;">+10 PTS</span></div>
-            </div>
-        </div>
-
+<div style="max-width: 450px; margin: 60px auto; padding: 0 20px;">
+    
+    <div style="margin-bottom: 30px; text-align: center;">
+        <h2 style="font-size: 32px; font-weight: 900; text-transform: uppercase; letter-spacing: -1px; margin-bottom: 8px;">
+            Acessar Bolão
+        </h2>
+        <p style="color: var(--text-muted); font-size: 14px; font-weight: 500;">
+            Insira suas credenciais para gerenciar seus palpites.
+        </p>
     </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div style="margin-bottom: 20px; padding: 14px 16px; border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.1); color: #f87171; font-size: 13px; font-weight: 700; border-radius: 2px; text-transform: uppercase; letter-spacing: 0.3px;">
+              <i class="fa-solid fa-circle-exclamation" style="margin-right: 8px;"></i> {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('login') }}" method="POST" style="background: var(--bg-surface); border: var(--border-sharp); border-radius: 4px; padding: 30px; transition: background 0.25s ease;">
+        
+        <div style="margin-bottom: 20px;">
+            <label for="nome" style="display: block; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;">
+                Nome de Usuário
+            </label>
+            <input type="text" id="nome" name="nome" required placeholder="Seu usuário" autocomplete="off"
+                   style="width: 100%; height: 46px; background: var(--bg-input); border: var(--border-sharp); border-radius: 2px; color: var(--text-main); padding: 0 14px; font-size: 14px; font-weight: 600; outline: none; transition: border-color 0.15s ease;">
+        </div>
+
+        <div style="margin-bottom: 25px;">
+            <label for="senha" style="display: block; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;">
+                Sua Senha
+            </label>
+            <input type="password" id="senha" name="senha" required placeholder="••••••••"
+                   style="width: 100%; height: 46px; background: var(--bg-input); border: var(--border-sharp); border-radius: 2px; color: var(--text-main); padding: 0 14px; font-size: 14px; font-weight: 600; outline: none; transition: border-color 0.15s ease;">
+        </div>
+
+        <button type="submit" class="btn-primary" style="margin-bottom: 15px;">
+            Entrar no Painel <i class="fa-solid fa-right-to-bracket"></i>
+        </button>
+
+        <div style="text-align: center; margin-top: 15px;">
+            <p style="font-size: 13px; color: var(--text-muted); font-weight: 600;">
+                Ainda não tem cadastro? 
+                <a href="{{ url_for('cadastro') }}" style="color: var(--accent-green); text-decoration: none; font-weight: 800; margin-left: 4px;">
+                    Cadastre-se aqui
+                </a>
+            </p>
+        </div>
+    </form>
 </div>
+
+<script>
+    // Efeito sutil de foco brutalista nos inputs
+    document.querySelectorAll('input').forEach(input => {
+        input.addEventListener('focus', () => input.style.borderColor = 'var(--accent-green)');
+        input.addEventListener('blur', () => input.style.borderColor = 'var(--border-sharp)');
+    });
+</script>
 {% endblock %}
