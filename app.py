@@ -8,11 +8,13 @@ from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
 
-# CONFIGURAÇÃO INTELIGENTE: POSTGRES NA RENDER / SQLITE LOCAL NO VS CODE
+# CONFIGURAÇÃO INTELIGENTE COM DRIVER PG8000 EM PYTHON PURO
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+pg8000://", 1)
+    elif DATABASE_URL.startswith("postgresql://"):
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+pg8000://", 1)
     app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 else:
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bolao.db"
