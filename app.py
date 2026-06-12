@@ -326,7 +326,7 @@ def api_palpites_usuario(user_id):
     palpites_user = Palpite.query.filter_by(usuario_id=user_id).all()
     resultado = []
     
-    for p in templates_user:
+    for p in palpites_user:
         jogo = Jogo.query.get(p.jogo_id)
         if jogo and (jogo.encerrado or jogo.status == "FINISHED"):
             pts_obtidos = calcular_pontos(p.gols_a, p.gols_b, jogo.gols_a, jogo.gols_b)
