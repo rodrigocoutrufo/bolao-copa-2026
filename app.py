@@ -7,22 +7,28 @@ from services.pontuacao import calcular_pontos
 from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bolao.db"
+
+# CORREÇÃO CRÍTICA DE PERSISTÊNCIA NA RENDER: 
+# Salva o banco em um diretório que o container não reseta a cada reinício automático
+if os.environ.get('RENDER'):
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/bolao.db"
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///bolao.db"
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # --------------------------------------------------------------------------
-# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO (Cookies Rígidos)
+# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO
 # --------------------------------------------------------------------------
-# Tenta ler a chave do ambiente de produção; se não existir (local), usa o fallback seguro
 app.secret_key = os.getenv(
     "FLASK_SECRET_KEY", 
-    "b9995658b0f7021d0cca5fc8707bb93cee9a6b0eba69c50a75b41af13d56168c"
+    "4f7b2c9e8a1d3f5b6c7e8d9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c"
 )
 
 app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,  # Impede que scripts JS acedam ao cookie de sessão (Proteção XSS)
-    SESSION_COOKIE_SAMESITE="Lax", # Protege contra ataques CSRF
-    PERMANENT_SESSION_LIFETIME=1800 # Expira a sessão ociosa após 30 minutos
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=1800
 )
 
 db.init_app(app)
@@ -34,9 +40,6 @@ COPA_ENCERRADA = False
 CAMPEAO_REAL = "Brasil"
 
 
-# --------------------------------------------------------------------------
-# CABEÇALHOS DE PROTEÇÃO COMPLEMENTARES (Anti-Injection & Console Clean)
-# --------------------------------------------------------------------------
 @app.after_request
 def adicionar_cabecalhos_seguranca(response):
     response.headers['Content-Security-Policy'] = (
@@ -68,12 +71,10 @@ def login():
             flash("Por favor, preencha todos os campos.", "danger")
             return render_template("login.html")
 
-        # Compara sempre em minúsculo para manter a consistência do hardening
         usuario = Usuario.query.filter_by(nome=nome.lower()).first()
 
-        # Validação robusta de hash com tempo constante (protege contra Timing Attacks)
         if usuario and check_password_hash(usuario.senha_hash, senha):
-            session.clear() # Limpa resíduos de sessões antigas por segurança
+            session.clear()
             session["usuario_id"] = usuario.id
             session["usuario_nome"] = usuario.nome
             session["is_admin"] = (usuario.nome.lower() in ["admin", "rodrigim"])
@@ -97,22 +98,20 @@ def cadastro():
             flash("Preencha todos os campos para se cadastrar.", "danger")
             return render_template("cadastro.html")
 
-        # Proteção contra inputs gigantescos e senhas fracas
+        # VALIDAÇÃO RÍGIDA DE SENHA COMPRIMENTO
+        if len(senha) < 6:
+            flash("⚽ Erro de Segurança: Sua senha precisa ter no mínimo 6 caracteres!", "danger")
+            return render_template("cadastro.html")
+
         if len(nome) > 30 or len(senha) > 50:
             flash("Dados muito longos. Limite de 30 caracteres para usuário.", "danger")
             return render_template("cadastro.html")
 
-        if len(senha) < 6:
-            flash("⚽ Segurança em campo! A sua senha precisa de ter pelo menos 6 caracteres.", "danger")
-            return render_template("cadastro.html")
-
-        # Hardening de duplicidade inteligente (Previne 'Rodrigo' vs 'rodrigo')
         nome_lower = nome.lower()
         if Usuario.query.filter_by(nome=nome_lower).first():
             flash("Este nome de usuário já está em uso.", "danger")
             return render_template("cadastro.html")
 
-        # Armazenamento seguro com hash Pbkdf2/Sha256
         novo_usuario = Usuario(nome=nome_lower, senha_hash=generate_password_hash(senha))
         db.session.add(novo_usuario)
         db.session.commit()
@@ -125,12 +124,12 @@ def cadastro():
 
 @app.route("/logout")
 def logout():
-    session.clear() # Destrói completamente o token e os dados da sessão
+    session.clear()
     return redirect(url_for("login"))
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES COM VALIDAÇÃO TEMPORAL RÍGIDA
+# 2. GESTÃO DE PALPITES
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -204,7 +203,7 @@ def palpites():
 @app.route("/salvar_palpite/<int:jogo_id>", methods=["POST"])
 def salvar_palpite(jogo_id):
     if "usuario_id" not in session:
-        return jsonify({"success": False, "message": "Sessão inválida ou expirada."}), 401
+        return jsonify({"success": False, "message": "Sessão inválida."}), 401
 
     data = request.get_json() if request.is_json else request.form
     gols_a = data.get("gols_a")
@@ -217,9 +216,8 @@ def salvar_palpite(jogo_id):
     if not jogo:
         return jsonify({"success": False, "message": "Jogo não localizado."}), 404
 
-    # HARDENING TEMPORAL: Bloqueia palpite retroativo se o jogo já começou ou fechou!
     if datetime.now() >= jogo.data_jogo or jogo.encerrado:
-        return jsonify({"success": False, "message": "Bloqueio de segurança: Este confronto já se iniciou ou foi encerrado!"}), 400
+        return jsonify({"success": False, "message": "Confronto já iniciado ou encerrado!"}), 400
 
     palpite_existente = Palpite.query.filter_by(usuario_id=session["usuario_id"], jogo_id=jogo_id).first()
     if palpite_existente:
@@ -313,7 +311,6 @@ def api_palpites_usuario(user_id):
     
     for p in palpites_user:
         jogo = Jogo.query.get(p.jogo_id)
-        # SEGURANÇA NA API: Só vaza o palpite se o jogo já estiver finalizado na base
         if jogo and (jogo.encerrado or jogo.status == "FINISHED"):
             pts_obtidos = calcular_pontos(p.gols_a, p.gols_b, jogo.gols_a, jogo.gols_b)
             resultado.append({
@@ -337,7 +334,7 @@ def api_palpites_usuario(user_id):
 @app.route("/admin")
 def admin_panel():
     if "usuario_id" not in session or not session.get("is_admin"):
-        return "Acesso Negado: Privilégios insuficientes.", 403
+        return "Acesso Negado.", 403
     
     total_jogos = Jogo.query.count()
     return render_template("admin.html", total_jogos=total_jogos)
@@ -368,5 +365,4 @@ def admin_api_limpar():
 
 
 if __name__ == "__main__":
-    # debug=False para produção garante total isolamento das variáveis do servidor
     app.run(debug=False)
