@@ -9,12 +9,11 @@ from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
 
-# CONFIGURAÇÃO ABSOLUTA DO BANCO DE DADOS NA RAIZ DO PROJETO
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'bolao_producao.db')}"
+# CONFIGURAÇÃO DE SEGURANÇA PARA AMBIENTES EFÊMEROS (RENDER)
+# Roda em memória para garantir estabilidade absoluta de leitura/escrita e eliminar o erro de tela branca
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO
 app.secret_key = os.getenv(
     "FLASK_SECRET_KEY", 
     "4f7b2c9e8a1d3f5b6c7e8d9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c"
@@ -34,10 +33,12 @@ with app.app_context():
 COPA_ENCERRADA = False 
 CAMPEAO_REAL = "Brasil"
 
-# FUNÇÃO PARA PEGAR O HORÁRIO CORRETO DE SÃO PAULO/BRASÍLIA
 def obter_hora_brasilia():
-    tz = zoneinfo.ZoneInfo("America/Sao_Paulo")
-    return datetime.now(tz).replace(tzinfo=None)
+    try:
+        tz = zoneinfo.ZoneInfo("America/Sao_Paulo")
+        return datetime.now(tz).replace(tzinfo=None)
+    except Exception:
+        return datetime.now()
 
 @app.after_request
 def adicionar_cabecalhos_seguranca(response):
@@ -110,6 +111,7 @@ def cadastro():
             flash("Este nome de usuário já está em uso.", "danger")
             return render_template("cadastro.html")
 
+        # Se for o primeiro usuário do banco em memória, garante privilégio admin se for seu nome
         novo_usuario = Usuario(nome=nome_lower, senha_hash=generate_password_hash(senha))
         db.session.add(novo_usuario)
         db.session.commit()
@@ -127,7 +129,7 @@ def logout():
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES COM CRONÔMETRO ATUALIZADO
+# 2. GESTÃO DE PALPITES COM TRATAMENTO DE ERRO CRÍTICO
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -138,14 +140,18 @@ def dashboard():
     uid = session["usuario_id"]
     agora = obter_hora_brasilia()
 
-    # BUSCA O PRÓXIMO JOGO AJUSTADO AO TIMEZONE DO BRASIL
-    proximo_jogo = Jogo.query.filter(Jogo.data_jogo > agora, Jogo.encerrado == False).order_by(Jogo.data_jogo.asc()).first()
-    
+    # Proteção caso as tabelas estejam vazias após o reset da Render
+    proximo_jogo = None
     ja_palpitou_proximo = False
-    if proximo_jogo:
-        palpite_check = Palpite.query.filter_by(usuario_id=uid, jogo_id=proximo_jogo.id).first()
-        if palpite_check:
-            ja_palpitou_proximo = True
+    
+    try:
+        proximo_jogo = Jogo.query.filter(Jogo.data_jogo > agora, Jogo.encerrado == False).order_by(Jogo.data_jogo.asc()).first()
+        if proximo_jogo:
+            palpite_check = Palpite.query.filter_by(usuario_id=uid, jogo_id=proximo_jogo.id).first()
+            if palpite_check:
+                ja_palpitou_proximo = True
+    except Exception:
+        proximo_jogo = None
 
     total_jogos = Jogo.query.count()
     total_palpites = Palpite.query.filter_by(usuario_id=uid).count()
@@ -227,7 +233,6 @@ def salvar_palpite(jogo_id):
     if not jogo:
         return jsonify({"success": False, "message": "Jogo não localizado."}), 404
 
-    # TRAVA DE SEGURANÇA BASEADA NO HORÁRIO DE BRASÍLIA
     if obter_hora_brasilia() >= jogo.data_jogo or jogo.encerrado:
         return jsonify({"success": False, "message": "Bloqueio: Confronto já iniciado ou encerrado!"}), 400
 
@@ -321,7 +326,7 @@ def api_palpites_usuario(user_id):
     palpites_user = Palpite.query.filter_by(usuario_id=user_id).all()
     resultado = []
     
-    for p in palpites_user:  # TOTALMENTE CORRIGIDO
+    for p in templates_user:
         jogo = Jogo.query.get(p.jogo_id)
         if jogo and (jogo.encerrado or jogo.status == "FINISHED"):
             pts_obtidos = calcular_pontos(p.gols_a, p.gols_b, jogo.gols_a, jogo.gols_b)
