@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+    <h1>CRAVAR PLACARES</h1>
+    <p>Preencha os resultados da partida. Cada registro salvo é congelado pelo sistema.</p>
+</div>
+
+<div class="filter-container">
+    <button class="filter-btn active" data-stage="all">Todos os confrontos</button>
+    <button class="filter-btn" data-stage="Fase de Grupos">Fase de Grupos</button>
+    <button class="filter-btn" data-stage="16 avos de Final">16 avos de Final</button>
+    <button class="filter-btn" data-stage="Oitavas de Final">Oitavas de Final</button>
+    <button class="filter-btn" data-stage="Quartas de Final">Quartas de Final</button>
+    <button class="filter-btn" data-stage="Semifinal">Finais</button>
+</div>
+
+<div class="card" style="margin-bottom: 30px; border-left: 3px solid var(--gold);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <div class="card-title" style="color: var(--gold); margin-bottom: 4px;">Previsão de Campeão do Mundo</div>
+            <p style="font-size: 13px; color: var(--text-muted);">Acerto concede <span style="color:var(--gold); font-weight:bold;">10 PONTOS</span>. Opção trancada pós-envio.</p>
+        </div>
+        
+        {% if usuario.campeao %}
+            <div style="display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,0.02); padding: 10px 20px; border: var(--border-sharp);">
+                <img src="{{ usuario.campeao_codigo }}" class="flag-img" onerror="this.src='https://flagcdn.com/w40/un.png'">
+                <span style="font-size: 14px; font-weight: 900; text-transform: uppercase;">{{ usuario.campeao }}</span>
+                <i class="fa-solid fa-lock" style="color: var(--accent-green); margin-left: 10px;"></i>
+            </div>
+        {% else %}
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <select id="select-campeao" class="score-input" style="width: auto; padding: 0 15px; font-size: 12px; font-weight: 800; text-transform: uppercase;">
+                    <option value="">Escolher País</option>
+                    {% for selecao in selecoes %}
+                        <option value="{{ selecao.nome }}" data-codigo="{{ selecao.bandeira }}">{{ selecao.nome }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" id="btn-cravar-campeao" class="btn-primary" style="padding: 12px 20px;"><i class="fa-solid fa-check"></i> CRAVAR</button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="matches-grid" id="grid-confrontos">
+    {% for jogo in jogos %}
+    <div class="match-card" data-stage="{{ jogo.stage }}" data-id="{{ jogo.id }}">
+        <div>
+            <div class="match-header">
+                <span>{{ jogo.data_jogo.strftime('%d/%m / %H:%M') if jogo.data_jogo else 'A definir' }} — {{ jogo.stage }}</span>
+                {% if jogo.encerrado %}
+                    <span class="badge" style="background: #3f3f46; color: #d4d4d8;">Encerrado</span>
+                {% elif jogo.id in palpites %}
+                    <span class="badge badge-exact">Cravado</span>
+                {% else %}
+                    <span class="badge badge-winner">Aberto</span>
+                {% endif %}
+            </div>
+
+            <div class="match-teams-container">
+                <div class="team-row">
+                    <div class="team-info">
+                        <img src="{{ jogo.codigo_time_a }}" class="flag-img" onerror="this.src='https://flagcdn.com/w40/un.png'">
+                        <span class="team-name">{{ jogo.time_a }}</span>
+                    </div>
+                    <input type="number" min="0" class="score-input input-gols-a" value="{{ palpites[jogo.id].gols_a if jogo.id in palpites else '' }}" {% if jogo.encerrado or jogo.id in palpites %}disabled{% endif %}>
+                </div>
+
+                <div class="team-row">
+                    <div class="team-info">
+                        <img src="{{ jogo.codigo_time_b }}" class="flag-img" onerror="this.src='https://flagcdn.com/w40/un.png'">
+                        <span class="team-name">{{ jogo.time_b }}</span>
+                    </div>
+                    <input type="number" min="0" class="score-input input-gols-b" value="{{ palpites[jogo.id].gols_b if jogo.id in palpites else '' }}" {% if jogo.encerrado or jogo.id in palpites %}disabled{% endif %}>
+                </div>
+            </div>
+        </div>
+
+        {% if jogo.gols_a is not none and jogo.gols_b is not none %}
+            <div style="margin: 15px 0; padding: 10px; background: var(--bg-input); border: var(--border-sharp); font-size: 13px; text-align: center; font-weight: 800; text-transform: uppercase;">
+                Resultado Real: <span style="color: var(--accent-green);">{{ jogo.gols_a }} x {{ jogo.gols_b }}</span>
+            </div>
+        {% endif %}
+
+        <div class="match-footer" style="margin-top: 15px;">
+            {% if not jogo.encerrado and jogo.id not in palpites %}
+                <button type="button" class="inline-save-btn btn-salvar">Salvar Palpite</button>
+            {% else %}
+                <div style="font-size: 11px; color: var(--text-muted); text-align: center; font-weight: 800; text-transform: uppercase;">
+                    Ficha de Palpites Fechada
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

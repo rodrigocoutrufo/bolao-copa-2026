@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bolão Copa 2026</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script>
+        // EXECUÇÃO IMEDIATA: Garante o carregamento do tema sem flashing visual
+        const temaSalvo = localStorage.getItem('bolao-theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', temaSalvo);
+    </script>
+</head>
+<body>
+
+<header class="navbar">
+    <div class="navbar-container">
+        <a href="{{ url_for('dashboard') }}" class="logo">
+            <i class="fa-solid fa-bolt"></i> <span>COPA 2026</span>
+        </a>
+
+        {% if session.get('usuario_id') %}
+        <nav class="nav-menu">
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Painel</a>
+            <a href="{{ url_for('palpites') }}" class="nav-link">Palpites</a>
+            <a href="{{ url_for('ranking') }}" class="nav-link">Classificação</a>
+        </nav>
+
+        <div class="navbar-actions">
+            <button id="toggle-theme-btn" class="theme-toggle-btn" title="Alternar Modo Visual">
+                <i class="fa-solid fa-sun"></i>
+            </button>
+
+            <div class="user-box">
+                <span class="user-name">{{ session['usuario_nome'] }}</span>
+                <a href="{{ url_for('logout') }}" class="btn-logout" title="Sair"><i class="fa-solid fa-arrow-right-from-bracket"></i></a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</header>
+
+<main class="container">
+    {% block content %}
+    {% endblock %}
+</main>
+
+{% block scripts %}
+{% endblock %}
+
+</body>
+</html>

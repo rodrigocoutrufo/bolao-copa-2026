@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero" style="background: linear-gradient(135deg, #1e293b, #0f172a);">
+    <h1><i class="fa-solid fa-lock text-gold"></i> Painel de Controle</h1>
+    <p>Área restrita para manutenção do banco de dados e sincronização de chaves.</p>
+</div>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <div class="card-title"><i class="fa-solid fa-database text-gold"></i> Status do Banco</div>
+        <div class="card-value" id="total-jogos-count">{{ total_jogos }} <span style="font-size: 16px; color: var(--text-muted);">jogos</span></div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 30px; max-width: 600px;">
+    <h2 style="font-size: 18px; margin-bottom: 20px; font-weight: 800;"><i class="fa-solid fa-gears"></i> Operações Disponíveis</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 15px;">
+        <button id="btn-sync-copa" class="btn-primary" style="background: #1e3a8a;">
+            <i class="fa-solid fa-rotate"></i> Sincronizar Jogos (Horário de Brasília)
+        </button>
+        
+        <button id="btn-limpar-copa" class="btn-primary" style="background: #991b1b;">
+            <i class="fa-solid fa-trash-can"></i> Limpar Banco de Dados
+        </button>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const btnSync = document.getElementById('btn-sync-copa');
+    const btnLimpar = document.getElementById('btn-limpar-copa');
+
+    btnSync.addEventListener('click', async () => {
+        btnSync.disabled = true;
+        btnSync.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sincronizando...';
+        
+        try {
+            const res = await fetch('/admin/api/sync', { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+            window.location.reload();
+        } catch {
+            alert('Erro ao processar sincronização.');
+            btnSync.disabled = false;
+            btnSync.innerHTML = '<i class="fa-solid fa-rotate"></i> Sincronizar Jogos';
+        }
+    });
+
+    btnLimpar.addEventListener('click', async () => {
+        if(!confirm('Tem certeza absoluta que deseja apagar TODOS os jogos? Isso não afetará os usuários.')) return;
+        
+        btnLimpar.disabled = true;
+        try {
+            const res = await fetch('/admin/api/limpar', { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+            window.location.reload();
+        } catch {
+            alert('Erro ao limpar os dados.');
+            btnLimpar.disabled = false;
+        }
+    });
+});
+</script>
+{% endblock %}
