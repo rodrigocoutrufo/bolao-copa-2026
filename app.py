@@ -9,7 +9,7 @@ from services.api_football import sincronizar_jogos
 app = Flask(__name__)
 
 # CORREÇÃO CRÍTICA DE PERSISTÊNCIA NA RENDER: 
-# Salva o banco em um diretório que o container não reseta a cada reinício automático
+# Guarda o banco num diretório que o container não limpa a cada reinício automático
 if os.environ.get('RENDER'):
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/bolao.db"
 else:
@@ -18,7 +18,7 @@ else:
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # --------------------------------------------------------------------------
-# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO
+# CONFIGURAÇÕES AVANÇADAS DE SEGURANÇA DE SESSÃO (Cookies Rígidos)
 # --------------------------------------------------------------------------
 app.secret_key = os.getenv(
     "FLASK_SECRET_KEY", 
@@ -26,9 +26,9 @@ app.secret_key = os.getenv(
 )
 
 app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
-    PERMANENT_SESSION_LIFETIME=1800
+    SESSION_COOKIE_HTTPONLY=True,  # Impede que scripts JS acedam ao cookie (Proteção XSS)
+    SESSION_COOKIE_SAMESITE="Lax", # Protege contra ataques CSRF
+    PERMANENT_SESSION_LIFETIME=1800 # Expira a sessão ociosa após 30 minutos
 )
 
 db.init_app(app)
@@ -40,6 +40,9 @@ COPA_ENCERRADA = False
 CAMPEAO_REAL = "Brasil"
 
 
+# --------------------------------------------------------------------------
+# CABEÇALHOS DE PROTEÇÃO COMPLEMENTARES (Anti-Injection & CSP)
+# --------------------------------------------------------------------------
 @app.after_request
 def adicionar_cabecalhos_seguranca(response):
     response.headers['Content-Security-Policy'] = (
@@ -71,10 +74,12 @@ def login():
             flash("Por favor, preencha todos os campos.", "danger")
             return render_template("login.html")
 
+        # Compara sempre em minúsculas para manter a consistência do hardening
         usuario = Usuario.query.filter_by(nome=nome.lower()).first()
 
+        # Validação robusta de hash com tempo constante (protege contra Timing Attacks)
         if usuario and check_password_hash(usuario.senha_hash, senha):
-            session.clear()
+            session.clear() # Limpa resíduos de sessões antigas por segurança
             session["usuario_id"] = usuario.id
             session["usuario_nome"] = usuario.nome
             session["is_admin"] = (usuario.nome.lower() in ["admin", "rodrigim"])
@@ -98,7 +103,7 @@ def cadastro():
             flash("Preencha todos os campos para se cadastrar.", "danger")
             return render_template("cadastro.html")
 
-        # VALIDAÇÃO RÍGIDA DE SENHA COMPRIMENTO
+        # VALIDAÇÃO RÍGIDA DE COMPRIMENTO DE SENHA
         if len(senha) < 6:
             flash("⚽ Erro de Segurança: Sua senha precisa ter no mínimo 6 caracteres!", "danger")
             return render_template("cadastro.html")
@@ -107,11 +112,13 @@ def cadastro():
             flash("Dados muito longos. Limite de 30 caracteres para usuário.", "danger")
             return render_template("cadastro.html")
 
+        # Hardening de duplicidade inteligente (Previne 'Rodrigo' vs 'rodrigo')
         nome_lower = nome.lower()
         if Usuario.query.filter_by(nome=nome_lower).first():
             flash("Este nome de usuário já está em uso.", "danger")
             return render_template("cadastro.html")
 
+        # Armazenamento seguro com hash Pbkdf2/Sha256
         novo_usuario = Usuario(nome=nome_lower, senha_hash=generate_password_hash(senha))
         db.session.add(novo_usuario)
         db.session.commit()
@@ -124,12 +131,12 @@ def cadastro():
 
 @app.route("/logout")
 def logout():
-    session.clear()
+    session.clear() # Destrói completamente o token e os dados da sessão
     return redirect(url_for("login"))
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES
+# 2. GESTÃO DE PALPITES COM VALIDAÇÃO TEMPORAL RÍGIDA E CONTAGEM
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -138,6 +145,19 @@ def dashboard():
         return redirect(url_for("login"))
 
     uid = session["usuario_id"]
+    agora = datetime.now()
+
+    # BUSCA O PRÓXIMO JOGO QUE AINDA NÃO COMEÇOU PARA A CONTAGEM REGRESSIVA
+    proximo_jogo = Jogo.query.filter(Jogo.data_jogo > agora, Jogo.encerrado == False).order_by(Jogo.data_jogo.asc()).first()
+    
+    # Verifica se o utilizador já palpitou neste próximo jogo
+    ja_palpitou_proximo = False
+    if proximo_jogo:
+        palpite_check = Palpite.query.filter_by(usuario_id=uid, jogo_id=proximo_jogo.id).first()
+        if palpite_check:
+            ja_palpitou_proximo = True
+
+    # Estatísticas do painel
     total_jogos = Jogo.query.count()
     total_palpites = Palpite.query.filter_by(usuario_id=uid).count()
     
@@ -161,7 +181,9 @@ def dashboard():
         total_palpites=total_palpites,
         pontos_acumulados=pontos_acumulados,
         acertos_exatos=acertos_exatos,
-        aproveitamento=aproveitamento
+        aproveitamento=aproveitamento,
+        proximo_jogo=proximo_jogo,
+        ja_palpitou_proximo=ja_palpitou_proximo
     )
 
 
@@ -203,7 +225,7 @@ def palpites():
 @app.route("/salvar_palpite/<int:jogo_id>", methods=["POST"])
 def salvar_palpite(jogo_id):
     if "usuario_id" not in session:
-        return jsonify({"success": False, "message": "Sessão inválida."}), 401
+        return jsonify({"success": False, "message": "Sessão inválida ou expirada."}), 401
 
     data = request.get_json() if request.is_json else request.form
     gols_a = data.get("gols_a")
@@ -216,8 +238,9 @@ def salvar_palpite(jogo_id):
     if not jogo:
         return jsonify({"success": False, "message": "Jogo não localizado."}), 404
 
+    # HARDENING TEMPORAL: Bloqueia palpite se o jogo já começou ou fechou!
     if datetime.now() >= jogo.data_jogo or jogo.encerrado:
-        return jsonify({"success": False, "message": "Confronto já iniciado ou encerrado!"}), 400
+        return jsonify({"success": False, "message": "Bloqueio de segurança: Este confronto já se iniciou ou foi encerrado!"}), 400
 
     palpite_existente = Palpite.query.filter_by(usuario_id=session["usuario_id"], jogo_id=jogo_id).first()
     if palpite_existente:
@@ -309,8 +332,9 @@ def api_palpites_usuario(user_id):
     palpites_user = Palpite.query.filter_by(usuario_id=user_id).all()
     resultado = []
     
-    for p in palpites_user:
+    for p in palindromos:
         jogo = Jogo.query.get(p.jogo_id)
+        # SEGURANÇA NA API: Só expõe o palpite se o jogo já estiver finalizado
         if jogo and (jogo.encerrado or jogo.status == "FINISHED"):
             pts_obtidos = calcular_pontos(p.gols_a, p.gols_b, jogo.gols_a, jogo.gols_b)
             resultado.append({
@@ -334,7 +358,7 @@ def api_palpites_usuario(user_id):
 @app.route("/admin")
 def admin_panel():
     if "usuario_id" not in session or not session.get("is_admin"):
-        return "Acesso Negado.", 403
+        return "Acesso Negado: Privilégios insuficientes.", 403
     
     total_jogos = Jogo.query.count()
     return render_template("admin.html", total_jogos=total_jogos)
