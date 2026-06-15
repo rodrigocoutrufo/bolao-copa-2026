@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, Usuario, Jogo, Palpite
@@ -8,7 +8,7 @@ from services.api_football import sincronizar_jogos
 
 app = Flask(__name__)
 
-# CONFIGURAÇÃO INTELIGENTE COM DRIVER PG8000 EM PYTHON PURO
+# CONFIGURAÇÃO DE BANCO: POSTGRES NA RENDER / SQLITE LOCAL
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     if DATABASE_URL.startswith("postgres://"):
@@ -56,7 +56,7 @@ def adicionar_cabecalhos_seguranca(response):
 
 
 # ==========================================================================
-# 1. ROTAS DE AUTENTICAÇÃO (LOGIN / CADASTRO)
+# 1. ROTAS DE AUTENTICAÇÃO
 # ==========================================================================
 
 @app.route("/", methods=["GET", "POST"])
@@ -103,10 +103,6 @@ def cadastro():
             flash("⚽ Erro de Segurança: Sua senha precisa ter no mínimo 6 caracteres!", "danger")
             return render_template("cadastro.html")
 
-        if len(nome) > 30 or len(senha) > 50:
-            flash("Dados muito longos. Limite de 30 caracteres para usuário.", "danger")
-            return render_template("cadastro.html")
-
         nome_lower = nome.lower()
         if Usuario.query.filter_by(nome=nome_lower).first():
             flash("Este nome de usuário já está em uso.", "danger")
@@ -129,7 +125,7 @@ def logout():
 
 
 # ==========================================================================
-# 2. GESTÃO DE PALPITES
+# 2. GESTÃO DE PALPITES (COM EDIÇÃO E VALIDAÇÃO DE 1 HORA ANTES)
 # ==========================================================================
 
 @app.route("/dashboard")
@@ -219,23 +215,34 @@ def salvar_palpite(jogo_id):
     if not jogo:
         return jsonify({"success": False, "message": "Jogo não localizado."}), 404
 
-    if datetime.now() >= jogo.data_jogo or jogo.encerrado:
-        return jsonify({"success": False, "message": "Bloqueio: Confronto já iniciado ou encerrado!"}), 400
+    # TRAVA REQUISITADA: Bloqueia se faltar menos de 1 hora para o início do jogo
+    limite_palpite = jogo.data_jogo - timedelta(hours=1)
+    if datetime.now() >= limite_palpite or jogo.encerrado:
+        return jsonify({
+            "success": False, 
+            "message": "🔒 Bloqueio: Os palpites fecham rigorosamente 1 hora antes do jogo!"
+        }), 400
 
+    # FUNCIONALIDADE DE EDIÇÃO AUTOMÁTICA: Se o palpite já existir, ele atualiza em vez de dar erro
     palpite_existente = Palpite.query.filter_by(usuario_id=session["usuario_id"], jogo_id=jogo_id).first()
-    if palpite_existente:
-        return jsonify({"success": False, "message": "Você já possui um palpite保存 para esta partida."}), 400
-
+    
     try:
-        novo_palpite = Palpite(
-            usuario_id=session["usuario_id"],
-            jogo_id=jogo_id,
-            gols_a=int(gols_a),
-            gols_b=int(gols_b)
-        )
-        db.session.add(novo_palpite)
+        if palpite_existente:
+            palpite_existente.gols_a = int(gols_a)
+            palpite_existente.gols_b = int(gols_b)
+            mensagem = "Palpite atualizado com sucesso!"
+        else:
+            novo_palpite = Palpite(
+                usuario_id=session["usuario_id"],
+                jogo_id=jogo_id,
+                gols_a=int(gols_a),
+                gols_b=int(gols_b)
+            )
+            db.session.add(novo_palpite)
+            mensagem = "Palpite fixado com sucesso!"
+            
         db.session.commit()
-        return jsonify({"success": True, "message": "Palpite fixado com sucesso!"})
+        return jsonify({"success": True, "message": mensagem})
     except Exception:
         db.session.rollback()
         return jsonify({"success": False, "message": "Erro interno de persistência."}), 500
@@ -331,7 +338,7 @@ def api_palpites_usuario(user_id):
 
 
 # ==========================================================================
-# 4. PAINEL ADM RESTRICT
+# 4. PAINEL ADM & AUTOMATIZAÇÃO DE SINCRONIZAÇÃO
 # ==========================================================================
 
 @app.route("/admin")
@@ -341,6 +348,21 @@ def admin_panel():
     
     total_jogos = Jogo.query.count()
     return render_template("admin.html", total_jogos=total_jogos)
+
+
+# FUNCIONALIDADE NOVA: Rota de sincronização automática via webhook/cron-job
+@app.route("/admin/api/auto-sync", methods=["GET", "POST"])
+def admin_api_auto_sync():
+    # Proteção simples por token via query string para evitar acessos maliciosos
+    token_seguranca = request.args.get("token")
+    if token_seguranca != "bolao_copa_2026_secret_key":
+        return jsonify({"success": False, "message": "Token inválido"}), 401
+        
+    try:
+        sincronizar_jogos()
+        return jsonify({"success": True, "message": "Sincronização automática rodada!"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 @app.route("/admin/api/sync", methods=["POST"])
